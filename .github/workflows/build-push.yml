@@ -26,7 +26,7 @@ permissions:
 
 env:
   IMAGE_NAME: api        # must match app_image_name in terraform.tfvars
-  DOCKER_CONTEXT: ${{ github.event.inputs.docker_context || 'app' }}
+  BUILD_CONTEXT: ${{ github.event.inputs.docker_context || 'app' }}
   DOCKERFILE: ${{ github.event.inputs.dockerfile || 'app/Dockerfile' }}
 
 jobs:
@@ -84,7 +84,7 @@ jobs:
             --file "${{ env.DOCKERFILE }}" \
             --label "org.opencontainers.image.revision=${{ github.sha }}" \
             --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
-            "${{ env.DOCKER_CONTEXT }}"
+            "${{ env.BUILD_CONTEXT }}"
 
       # ── Push ──────────────────────────────────────────────────────────────
       - name: Push to ACR
