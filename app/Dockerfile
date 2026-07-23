@@ -4,8 +4,8 @@ FROM node:20-alpine AS build
 WORKDIR /app
 
 # Install dependencies first (layer cached unless package.json changes)
-COPY package.json package-lock.json* ./
-RUN npm ci --omit=dev
+COPY package.json ./
+RUN npm install --omit=dev
 
 # ── Runtime stage ─────────────────────────────────────────────────────────────
 FROM node:20-alpine AS runtime
