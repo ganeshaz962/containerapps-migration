@@ -50,7 +50,28 @@ variable "app_image_tag" {
   default     = "latest"
 }
 
-# ─── Container App Resources ──────────────────────────────────────────────────
+# ─── Custom Domain & Certificate ─────────────────────────────────────────────
+
+variable "custom_domain" {
+  description = "Custom domain to bind to the Container App (e.g. testcp.ttgfriends.in)."
+  type        = string
+  default     = ""
+}
+
+variable "cloudflare_origin_cert_pfx_base64" {
+  description = "Base64-encoded PFX of the Cloudflare Origin Certificate. Generate with: [Convert]::ToBase64String([IO.File]::ReadAllBytes('origin.pfx'))"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "cloudflare_origin_cert_password" {
+  description = "Password used when exporting the PFX file."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 
 variable "app_cpu" {
   description = "vCPU allocated to the application container."

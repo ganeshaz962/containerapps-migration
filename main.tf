@@ -82,6 +82,19 @@ resource "azurerm_container_app_environment" "env" {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Cloudflare Origin Certificate (uploaded to the Container Apps Environment)
+# Required to fix SSL 525 errors when Cloudflare proxies to the Container App.
+# ─────────────────────────────────────────────────────────────────────────────
+resource "azurerm_container_app_environment_certificate" "cloudflare_origin" {
+  count = var.custom_domain != "" ? 1 : 0
+
+  name                         = "cloudflare-origin-cert"
+  container_app_environment_id = azurerm_container_app_environment.env.id
+  certificate_blob_base64      = var.cloudflare_origin_cert_pfx_base64
+  certificate_password         = var.cloudflare_origin_cert_password
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Container App
 #
 # Security model:
@@ -138,6 +151,16 @@ resource "azurerm_container_app" "app" {
         ip_address_range = ip_security_restriction.value
         name             = ip_security_restriction.key
         description      = "Allow Cloudflare edge IP range"
+      }
+    }
+
+    # Bind the custom domain + Cloudflare Origin Certificate when provided
+    dynamic "custom_domain" {
+      for_each = var.custom_domain != "" ? [var.custom_domain] : []
+      content {
+        name                     = custom_domain.value
+        certificate_id           = azurerm_container_app_environment_certificate.cloudflare_origin[0].id
+        certificate_binding_type = "SniEnabled"
       }
     }
   }
