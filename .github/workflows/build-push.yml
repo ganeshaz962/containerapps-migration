@@ -1,0 +1,138 @@
+name: Build & Push to ACR
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag (defaults to commit SHA)"
+        required: false
+        default: ""
+
+# Required for OIDC authentication to Azure (no stored client secrets)
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  IMAGE_NAME: api   # must match app_image_name in terraform.tfvars
+
+jobs:
+  build-and-push:
+    name: Build & Push Image
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Authenticate to Azure via OIDC ───────────────────────────────────
+      # Requires a federated credential configured in your App Registration.
+      # See setup instructions in the comments at the bottom of this file.
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # ── Login to ACR ─────────────────────────────────────────────────────
+      # Uses the Azure CLI session from the step above.
+      # Admin credentials are disabled; access is via the OIDC identity.
+      - name: Login to ACR
+        run: az acr login --name ${{ secrets.ACR_NAME }}
+
+      # ── Resolve image tag ─────────────────────────────────────────────────
+      # Manual dispatch can override the tag; otherwise use the commit SHA
+      # for full traceability.
+      - name: Resolve image tag
+        id: meta
+        run: |
+          TAG="${{ github.event.inputs.image_tag }}"
+          if [ -z "$TAG" ]; then
+            TAG="${{ github.sha }}"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "image=${{ secrets.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:$TAG" >> "$GITHUB_OUTPUT"
+
+      # ── Build ─────────────────────────────────────────────────────────────
+      - name: Build Docker image
+        run: |
+          docker build \
+            --tag "${{ steps.meta.outputs.image }}" \
+            --label "org.opencontainers.image.revision=${{ github.sha }}" \
+            --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
+            .
+
+      # ── Push ──────────────────────────────────────────────────────────────
+      - name: Push to ACR
+        run: docker push "${{ steps.meta.outputs.image }}"
+
+      # ── Deploy to Container App ───────────────────────────────────────────
+      # Updates the Container App to pull the newly pushed image.
+      # Creates a new revision; traffic is shifted immediately (Single mode).
+      - name: Update Container App
+        run: |
+          az containerapp update \
+            --name "${{ secrets.CONTAINER_APP_NAME }}" \
+            --resource-group "${{ secrets.RESOURCE_GROUP }}" \
+            --image "${{ steps.meta.outputs.image }}"
+
+      - name: Summary
+        run: |
+          echo "### Deployment complete :rocket:" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Image:** \`${{ steps.meta.outputs.image }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Container App:** \`${{ secrets.CONTAINER_APP_NAME }}\`" >> "$GITHUB_STEP_SUMMARY"
+
+# =============================================================================
+# REQUIRED GITHUB SECRETS
+# =============================================================================
+# Go to your repo → Settings → Secrets and variables → Actions → New secret
+#
+#   AZURE_CLIENT_ID       App Registration client ID (see OIDC setup below)
+#   AZURE_TENANT_ID       Azure AD tenant ID
+#   AZURE_SUBSCRIPTION_ID Azure subscription ID
+#   ACR_NAME              ACR resource name          e.g. myapp123456acr
+#   ACR_LOGIN_SERVER      ACR login server URL        e.g. myapp123456acr.azurecr.io
+#   CONTAINER_APP_NAME    Container App resource name e.g. myapp-app
+#   RESOURCE_GROUP        Resource group name         e.g. rg-container-apps
+#
+# Tip: get ACR_NAME and ACR_LOGIN_SERVER from Terraform outputs:
+#   terraform output acr_name
+#   terraform output acr_login_server
+#
+# =============================================================================
+# OIDC SETUP (one-time, run in Azure CLI)
+# =============================================================================
+# 1. Create an App Registration
+#    az ad app create --display-name "github-acr-deploy"
+#
+# 2. Create a service principal for it
+#    az ad sp create --id <appId>
+#
+# 3. Grant AcrPush on the ACR
+#    az role assignment create \
+#      --assignee <appId> \
+#      --role AcrPush \
+#      --scope $(az acr show --name <ACR_NAME> --query id -o tsv)
+#
+# 4. Grant Contributor on the Container App (for the update step)
+#    az role assignment create \
+#      --assignee <appId> \
+#      --role Contributor \
+#      --scope $(az containerapp show -n <APP_NAME> -g <RG> --query id -o tsv)
+#
+# 5. Add a federated credential (replace ORG/REPO and BRANCH)
+#    az ad app federated-credential create \
+#      --id <appId> \
+#      --parameters '{
+#        "name": "github-main",
+#        "issuer": "https://token.actions.githubusercontent.com",
+#        "subject": "repo:ORG/REPO:ref:refs/heads/main",
+#        "audiences": ["api://AzureADTokenExchange"]
+#      }'
+#
+# 6. Store the App Registration client ID in the AZURE_CLIENT_ID secret.
+# =============================================================================

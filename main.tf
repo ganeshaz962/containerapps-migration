@@ -221,15 +221,7 @@ locals {
     "131.0.72.0/22",
   ]
 
-  cloudflare_ipv6_ranges = [
-    "2400:cb00::/32",
-    "2606:4700::/32",
-    "2803:f800::/32",
-    "2405:b500::/32",
-    "2405:8100::/32",
-    "2a06:98c0::/29",
-    "2c0f:f248::/32",
-  ]
-
-  cloudflare_ip_ranges = concat(local.cloudflare_ipv4_ranges, local.cloudflare_ipv6_ranges)
+  # Note: Azure Container Apps IP security restrictions do not support IPv6.
+  # Only Cloudflare IPv4 ranges are used here.
+  cloudflare_ip_ranges = local.cloudflare_ipv4_ranges
 }
