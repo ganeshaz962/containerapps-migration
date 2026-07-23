@@ -81,6 +81,7 @@ jobs:
         run: |
           docker build \
             --tag "${{ steps.meta.outputs.image }}" \
+            --tag "${{ secrets.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:latest" \
             --file "${{ env.DOCKERFILE }}" \
             --label "org.opencontainers.image.revision=${{ github.sha }}" \
             --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
@@ -88,7 +89,9 @@ jobs:
 
       # ── Push ──────────────────────────────────────────────────────────────
       - name: Push to ACR
-        run: docker push "${{ steps.meta.outputs.image }}"
+        run: |
+          docker push "${{ steps.meta.outputs.image }}"
+          docker push "${{ secrets.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:latest"
 
       # ── Deploy to Container App ───────────────────────────────────────────
       # Updates the Container App to pull the newly pushed image.
@@ -98,7 +101,7 @@ jobs:
           az containerapp update \
             --name "${{ secrets.CONTAINER_APP_NAME }}" \
             --resource-group "${{ secrets.RESOURCE_GROUP }}" \
-            --image "${{ steps.meta.outputs.image }}"
+            --image "${{ secrets.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:latest"
 
       - name: Summary
         run: |
