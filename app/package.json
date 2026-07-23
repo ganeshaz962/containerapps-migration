@@ -1,0 +1,16 @@
+{
+  "name": "sample-web-app",
+  "version": "1.0.0",
+  "description": "Sample web UI running on Azure Container Apps",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "dev": "node --watch app.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -10,6 +10,14 @@ on:
         description: "Image tag (defaults to commit SHA)"
         required: false
         default: ""
+      docker_context:
+        description: "Path to Docker build context (relative to repo root)"
+        required: false
+        default: "."
+      dockerfile:
+        description: "Path to Dockerfile (relative to repo root)"
+        required: false
+        default: "Dockerfile"
 
 # Required for OIDC authentication to Azure (no stored client secrets)
 permissions:
@@ -17,7 +25,9 @@ permissions:
   contents: read
 
 env:
-  IMAGE_NAME: api   # must match app_image_name in terraform.tfvars
+  IMAGE_NAME: api        # must match app_image_name in terraform.tfvars
+  DOCKER_CONTEXT: ${{ github.event.inputs.docker_context || 'app' }}
+  DOCKERFILE: ${{ github.event.inputs.dockerfile || 'app/Dockerfile' }}
 
 jobs:
   build-and-push:
@@ -58,13 +68,23 @@ jobs:
           echo "image=${{ secrets.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:$TAG" >> "$GITHUB_OUTPUT"
 
       # ── Build ─────────────────────────────────────────────────────────────
+      - name: Verify Dockerfile exists
+        run: |
+          if [ ! -f "${{ env.DOCKERFILE }}" ]; then
+            echo "ERROR: Dockerfile not found at '${{ env.DOCKERFILE }}'"
+            echo "Repo contents:"
+            find . -name 'Dockerfile*' -not -path './.git/*'
+            exit 1
+          fi
+
       - name: Build Docker image
         run: |
           docker build \
             --tag "${{ steps.meta.outputs.image }}" \
+            --file "${{ env.DOCKERFILE }}" \
             --label "org.opencontainers.image.revision=${{ github.sha }}" \
             --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
-            .
+            "${{ env.DOCKER_CONTEXT }}"
 
       # ── Push ──────────────────────────────────────────────────────────────
       - name: Push to ACR
