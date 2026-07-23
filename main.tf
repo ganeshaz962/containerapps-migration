@@ -181,28 +181,6 @@ resource "azurerm_container_app" "app" {
         name  = "PORT"
         value = "3000"
       }
-
-      # Liveness probe – restarts the container if the app becomes unresponsive
-      liveness_probe {
-        transport = "HTTP"
-        port      = 3000
-        path      = "/healthz"
-
-        initial_delay           = 10
-        interval_seconds        = 15
-        failure_count_threshold = 3
-      }
-
-      # Readiness probe – gates traffic until the app is ready
-      readiness_probe {
-        transport = "HTTP"
-        port      = 3000
-        path      = "/healthz"
-
-        interval_seconds        = 5
-        failure_count_threshold = 3
-        success_count_threshold = 1
-      }
     }
 
   }
